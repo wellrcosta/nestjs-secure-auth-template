@@ -8,8 +8,5 @@ node_modules
 /dist
 /coverage
 
-# prisma generated (if any)
-/generated/prisma
-
 # misc
 .DS_Store
