@@ -466,6 +466,42 @@ export class AuthService {
     });
   }
 
+  async revokeSessionById(input: {
+    userId?: string;
+    sessionId: string;
+    currentSessionId?: string;
+    ip?: string;
+    userAgent?: string;
+  }) {
+    if (!input.userId) throw new UnauthorizedException();
+
+    const session = await this.prisma.session.findUnique({
+      where: { id: input.sessionId },
+      select: { id: true, userId: true, revokedAt: true },
+    });
+
+    if (!session || session.userId !== input.userId) {
+      throw new UnauthorizedException();
+    }
+
+    if (!session.revokedAt) {
+      await this.revokeSession(session.id);
+
+      await this.audit({
+        action: 'SESSION_REVOKE',
+        outcome: 'SUCCESS',
+        userId: input.userId,
+        sessionId: session.id,
+        ip: input.ip,
+        userAgent: input.userAgent,
+        details: {
+          revokedSessionId: session.id,
+          bySessionId: input.currentSessionId,
+        },
+      });
+    }
+  }
+
   private async revokeSession(sessionId: string) {
     await this.prisma.session.update({
       where: { id: sessionId },

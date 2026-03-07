@@ -1,14 +1,16 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
+  Param,
   Post,
   Req,
   Res,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiParam, ApiTags } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 
 import { Public } from '../common/public.decorator';
@@ -113,7 +115,31 @@ export class AuthController {
   @ApiBearerAuth()
   @Get('sessions')
   async listSessions(@Req() req: Request) {
-    const payload = (req as Request & { user?: { sub: string } }).user;
+    const payload = (req as Request & { user?: { sub: string; sid: string } })
+      .user;
     return this.auth.listSessions(payload?.sub);
+  }
+
+  @ApiBearerAuth()
+  @ApiParam({ name: 'sessionId', type: String })
+  @Delete('sessions/:sessionId')
+  @HttpCode(204)
+  async revokeSession(
+    @Req() req: Request,
+    @Param('sessionId') sessionId: string,
+    @Res() res: Response,
+  ) {
+    const payload = (req as Request & { user?: { sub: string; sid: string } })
+      .user;
+
+    await this.auth.revokeSessionById({
+      userId: payload?.sub,
+      sessionId,
+      currentSessionId: payload?.sid,
+      ip: req.ip,
+      userAgent: req.get('user-agent') ?? undefined,
+    });
+
+    return res.send();
   }
 }
