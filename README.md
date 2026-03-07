@@ -58,6 +58,11 @@ Cookies:
 
 ## Development
 
+## Frontend integration
+
+See: [`docs/frontend.md`](docs/frontend.md)
+
+
 ```bash
 cd api
 pnpm install
