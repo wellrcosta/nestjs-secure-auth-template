@@ -13,8 +13,9 @@ services:
   api:
     image: node:22-alpine
     working_dir: /app
-    command: sh -lc "corepack enable && pnpm install && pnpm prisma:generate && pnpm start:dev"
+    command: sh -lc "corepack enable && corepack prepare pnpm@10.30.3 --activate && pnpm install --force --no-frozen-lockfile && pnpm prisma:generate && pnpm prisma:deploy && pnpm prisma:seed && pnpm start:dev"
     environment:
+      CI: "true"
       NODE_ENV: development
       PORT: 3000
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/secure_auth?schema=public

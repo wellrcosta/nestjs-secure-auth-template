@@ -155,6 +155,70 @@ In Grafana, use **Explore** → **Loki** and query:
 - Mobile/React Native apps that do not have a reliable httpOnly cookie experience.
   - In those cases, prefer storing refresh tokens in secure storage and sending them in the request body.
 
+## How to test auth (Swagger)
+
+After starting the stack (`docker compose up --build`), open Swagger:
+
+- http://localhost:3000/docs
+
+### 1) Register
+
+Call `POST /auth/register`:
+
+```json
+{
+  "email": "demo@local.test",
+  "password": "ChangeMe123!"
+}
+```
+
+> If you use docker-compose, the seed already creates this user by default.
+
+### 2) Login
+
+Call `POST /auth/login` with the same credentials.
+
+Expected results:
+- Response JSON includes `access_token`
+- Response sets cookies:
+  - `refresh_token` (**httpOnly**)
+  - `csrf_token` (non-httpOnly)
+
+### 3) Call an authenticated endpoint
+
+1. In Swagger, click **Authorize**.
+2. Paste:
+
+```
+Bearer <access_token>
+```
+
+Then call:
+- `GET /auth/sessions`
+
+### 4) Refresh
+
+Because refresh relies on cookies + CSRF:
+- Make sure Swagger sends cookies (same-origin)
+- Copy the `csrf_token` cookie value
+- Call `POST /auth/refresh` with header:
+
+```
+x-csrf-token: <csrf_token cookie>
+```
+
+Expected:
+- Response returns a new `access_token`
+- Cookies are rotated (new `refresh_token` + new `csrf_token`)
+
+### 5) Verify rotation / reuse detection
+
+- Call `/auth/refresh` twice and observe:
+  - the refresh token rotates (cookie changes)
+- If you replay an older refresh cookie value, the template revokes the whole session.
+
+> Replaying old cookies is easiest using Postman/curl by manually setting the `Cookie:` header.
+
 ## Git workflow
 
 - Default branch: `main`
