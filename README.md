@@ -58,6 +58,35 @@ Cookies:
 
 ## Development
 
+## Local stack (Postgres + Loki)
+
+This repository ships a `docker-compose.yml` that starts:
+- Postgres
+- API (NestJS)
+- Loki + Promtail
+- Grafana (Loki datasource pre-provisioned)
+
+```bash
+docker compose up --build
+```
+
+- API docs: http://localhost:3000/docs
+- Grafana: http://localhost:3001 (admin/admin)
+- Loki: http://localhost:3100
+
+### Logs
+
+The API emits **JSON logs**. Promtail reads the API container logs from the Docker socket and pushes to Loki.
+
+In Grafana, use **Explore** → **Loki** and query:
+
+```
+{container=~".*api.*"}
+```
+
+> Tip: Remove the `keep` relabel rule in `infra/promtail/config.yml` to ingest logs from all containers.
+
+
 ```bash
 cd api
 pnpm install
