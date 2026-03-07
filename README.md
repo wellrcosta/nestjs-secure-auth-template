@@ -58,6 +58,46 @@ Cookies:
 
 ## Development
 
+```bash
+cd api
+pnpm install
+cp .env.example .env
+
+# Generate Prisma client (required after schema changes)
+pnpm prisma:generate
+
+pnpm start:dev
+```
+
+Open:
+- http://localhost:3000/docs
+
+## Auth endpoints (summary)
+
+- `POST /auth/register` (public)
+- `POST /auth/login` (public)
+  - sets `refresh_token` (httpOnly) + `csrf_token` (non-httpOnly)
+  - returns `{ access_token, user }`
+- `POST /auth/refresh` (requires CSRF)
+  - reads refresh cookie
+  - rotates refresh token
+  - returns `{ access_token }`
+- `POST /auth/logout` (requires CSRF)
+- `POST /auth/logout-all` (requires CSRF)
+- `GET /auth/sessions` (JWT bearer)
+- `DELETE /auth/sessions/:sessionId` (JWT bearer)
+
+### CSRF header
+
+For endpoints protected by CSRF (`/auth/refresh`, `/auth/logout`, `/auth/logout-all`):
+
+- browser will send cookie automatically
+- client must send a header:
+
+```
+x-csrf-token: <value of csrf_token cookie>
+```
+
 ## Local stack (Postgres + Loki)
 
 This repository ships a `docker-compose.yml` that starts:
@@ -86,50 +126,34 @@ In Grafana, use **Explore** → **Loki** and query:
 
 > Tip: Remove the `keep` relabel rule in `infra/promtail/config.yml` to ingest logs from all containers.
 
-
-```bash
-cd api
-pnpm install
-cp .env.example .env
-
-# Generate Prisma client (required after schema changes)
-pnpm prisma:generate
-
-pnpm start:dev
-```
-
-Open:
-- http://localhost:3000/docs
-
-## Auth endpoints (summary)
-
-- `POST /auth/register` (public)
-- `POST /auth/login` (public)
-  - sets `refresh_token` (httpOnly) + `csrf_token` (non-httpOnly)
-  - returns `{ access_token }`
-- `POST /auth/refresh` (requires CSRF)
-  - reads refresh cookie
-  - rotates refresh token
-  - returns `{ access_token }`
-- `POST /auth/logout` (requires CSRF)
-- `POST /auth/logout-all` (requires CSRF)
-- `GET /auth/sessions` (JWT bearer)
-
-### CSRF header
-
-For endpoints protected by CSRF (`/auth/refresh`, `/auth/logout`, `/auth/logout-all`):
-
-- browser will send cookie automatically
-- client must send a header:
-
-```
-x-csrf-token: <value of csrf_token cookie>
-```
-
 ## Logging
 
 - App logs are JSON (nestjs-pino) and redact sensitive fields.
 - Audit events are also stored in the `AuditLog` table.
+
+## Threat model and trade-offs
+
+### What this template mitigates well
+
+- **Session hijacking via stolen refresh token**: refresh tokens are rotated and stored server-side as hashed records.
+  - If a revoked token is reused, we treat it as potential theft and revoke the entire session.
+- **Token exfiltration via localStorage leaks**: refresh tokens are never exposed to JavaScript.
+- **Credential stuffing / brute force**: login has lockout logic and the API includes throttling.
+
+### What this template does not solve
+
+- **XSS**: If an attacker gets XSS on a trusted origin, they can perform authenticated actions.
+  - Mitigate with CSP, safe rendering, dependency hygiene, and strict input handling.
+- **Compromised device**: If the OS/browser is compromised, any auth mechanism can be abused.
+
+### When cookie-based refresh is a good fit
+
+- Browser-based applications where you want to avoid storing long-lived tokens in JS-accessible storage.
+
+### When it is NOT a good fit
+
+- Mobile/React Native apps that do not have a reliable httpOnly cookie experience.
+  - In those cases, prefer storing refresh tokens in secure storage and sending them in the request body.
 
 ## Git workflow
 
