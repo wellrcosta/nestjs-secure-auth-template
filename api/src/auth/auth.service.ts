@@ -425,18 +425,20 @@ export class AuthService {
       path: '/auth',
     });
 
+    // CSRF cookie must be readable by the frontend JS on any route.
+    // If we scope it to /auth, `document.cookie` won't include it on `/`.
     res.cookie('csrf_token', csrfToken, {
       httpOnly: false,
       secure,
       sameSite,
       domain,
-      path: '/auth',
+      path: '/',
     });
   }
 
   clearAuthCookies(res: Response) {
     res.clearCookie('refresh_token', { path: '/auth' });
-    res.clearCookie('csrf_token', { path: '/auth' });
+    res.clearCookie('csrf_token', { path: '/' });
   }
 
   private issueRefreshToken() {
