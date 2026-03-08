@@ -58,8 +58,9 @@ Cookies:
 
 ## Development
 
-## Frontend integration
+## Documentation
 
+- Overview (threat model, architecture, trade-offs): [`docs/overview.md`](docs/overview.md)
 - Frontend guide: [`docs/frontend.md`](docs/frontend.md)
 - Backend auth design: [`docs/backend-auth.md`](docs/backend-auth.md)
 

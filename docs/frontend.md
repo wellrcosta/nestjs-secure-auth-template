@@ -70,7 +70,15 @@ For endpoints protected by CSRF (`/auth/refresh`, `/auth/logout`, `/auth/logout-
   x-csrf-token: <value of csrf_token cookie>
   ```
 
-## Recommended request strategy
+## Request strategies (and why this repo uses one)
+
+This repo documents multiple options because refresh token **rotation** changes the frontend problem.
+
+If you're reading this in isolation:
+- "Option A" is simply the most practical and common strategy for browser apps.
+- Alternatives exist (timers, boot-only refresh), but they have trade-offs.
+
+For the full discussion, see: `docs/overview.md`.
 
 ### Option A (recommended): 401 → refresh → retry (once)
 
