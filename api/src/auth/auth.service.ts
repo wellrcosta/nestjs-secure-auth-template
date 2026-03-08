@@ -427,6 +427,9 @@ export class AuthService {
 
     // CSRF cookie must be readable by the frontend JS on any route.
     // If we scope it to /auth, `document.cookie` won't include it on `/`.
+    //
+    // Also: we explicitly clear any legacy csrf_token cookie scoped to `/auth`
+    // to avoid having two cookies with the same name but different paths.
     res.cookie('csrf_token', csrfToken, {
       httpOnly: false,
       secure,
@@ -434,11 +437,17 @@ export class AuthService {
       domain,
       path: '/',
     });
+
+    // Clear legacy cookie if present
+    res.clearCookie('csrf_token', { path: '/auth' });
   }
 
   clearAuthCookies(res: Response) {
     res.clearCookie('refresh_token', { path: '/auth' });
+
+    // Clear both paths to be safe
     res.clearCookie('csrf_token', { path: '/' });
+    res.clearCookie('csrf_token', { path: '/auth' });
   }
 
   private issueRefreshToken() {
