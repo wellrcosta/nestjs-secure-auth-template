@@ -141,6 +141,22 @@ export class AuthService {
       },
     });
 
+    // Single-session per deviceId (web): if the same device logs in again, revoke the previous active session.
+    if (input.deviceId) {
+      const existing = await this.prisma.session.findFirst({
+        where: {
+          userId: user.id,
+          deviceId: input.deviceId,
+          revokedAt: null,
+        },
+        select: { id: true },
+      });
+
+      if (existing) {
+        await this.revokeSession(existing.id);
+      }
+    }
+
     const session = await this.prisma.session.create({
       data: {
         userId: user.id,
@@ -333,10 +349,9 @@ export class AuthService {
 
     if (!token) return;
 
-    await this.prisma.refreshToken.update({
-      where: { id: token.id },
-      data: { revokedAt: new Date() },
-    });
+    // Professional default: kill the whole session on logout.
+    // This prevents a "logged out but session still active" state.
+    await this.revokeSession(token.sessionId);
 
     await this.audit({
       action: 'AUTH_LOGOUT',

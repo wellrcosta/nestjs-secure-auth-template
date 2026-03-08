@@ -11,7 +11,7 @@ This template uses:
 - **Refresh tokens** stored in **httpOnly cookies** (never readable by JavaScript).
 - **CSRF protection** (double-submit cookie) for cookie-authenticated endpoints.
 
-This document explains how to implement a browser frontend correctly.
+This document explains how to implement a browser frontend correctly, including pros/cons.
 
 ## Why cookie-based refresh tokens
 
@@ -21,7 +21,17 @@ With this approach:
 - refresh tokens are not available to JS
 - the browser sends them automatically via cookies
 
-Trade-off: you must handle **CSRF** and configure **CORS + credentials** correctly.
+### Pros
+
+- refresh token is not exposed to JS (reduced impact of token exfiltration)
+- works well for traditional browser apps
+- enables robust server-side session control (rotation, reuse detection)
+
+### Cons
+
+- requires CSRF protection for cookie-authenticated endpoints
+- cross-origin setups require careful CORS + cookie settings
+- does not protect you from XSS-driven actions (attackers can still call your API)
 
 ## Required server-side settings (API)
 
@@ -53,117 +63,70 @@ On `POST /auth/login`, the server sets two cookies:
 
 For endpoints protected by CSRF (`/auth/refresh`, `/auth/logout`, `/auth/logout-all`), the client must send:
 
-- the cookies (automatic in browsers when `credentials: 'include'` is used)
+- cookies (automatic in browsers when `credentials: 'include'` is used)
 - a header:
 
   ```
   x-csrf-token: <value of csrf_token cookie>
   ```
 
+## Recommended request strategy
+
+### Option A (recommended): 401 → refresh → retry (once)
+
+- send API requests with the access token
+- if a request returns 401:
+  1) call `/auth/refresh` (cookies + CSRF)
+  2) retry the original request once
+
+### Why refresh must be deduplicated
+
+Because refresh tokens are **rotated**, two concurrent refresh calls can race:
+
+- refresh #1 rotates token A → token B
+- refresh #2 still uses token A → token A is revoked → 401
+
+Therefore:
+- implement a **single refresh lock** (only one refresh in flight)
+- other requests should wait for the lock
+
+## Page reload behavior (session restore)
+
+If you keep the access token only in memory (recommended), a full page reload loses it.
+
+To avoid sending users back to the login screen on reload, do a **silent refresh** on app boot:
+
+1) call `/auth/refresh`
+2) if it succeeds, you have a new access token
+3) load the initial app state
+
+## Device identity (web)
+
+If your backend enforces “single session per device”, the frontend should provide a stable `deviceId`.
+
+Recommended:
+- generate a `deviceId` once
+- store it in `localStorage`
+- include it in login payloads
+
 ## Minimal fetch-based implementation
 
-### 1) Access token storage
+The demo app under `web/` contains a minimal working example.
 
-```ts
-let accessToken: string | null = null;
+Key pieces:
 
-export function setAccessToken(token: string | null) {
-  accessToken = token;
-}
-
-export function getAccessToken() {
-  return accessToken;
-}
-```
-
-### 2) Read CSRF token from cookies
-
-```ts
-export function getCsrfTokenFromCookie(): string | null {
-  const match = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]+)/);
-  return match ? decodeURIComponent(match[1]) : null;
-}
-```
-
-### 3) Login
-
-```ts
-export async function login(API_URL: string, email: string, password: string) {
-  const res = await fetch(`${API_URL}/auth/login`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    credentials: 'include',
-    body: JSON.stringify({ email, password, deviceId: 'web' }),
-  });
-
-  if (!res.ok) throw new Error('Login failed');
-
-  const data = await res.json();
-  setAccessToken(data.access_token);
-  return data.user;
-}
-```
-
-### 4) Refresh
-
-```ts
-export async function refreshAccessToken(API_URL: string) {
-  const csrf = getCsrfTokenFromCookie();
-  if (!csrf) throw new Error('Missing csrf_token cookie');
-
-  const res = await fetch(`${API_URL}/auth/refresh`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: {
-      'x-csrf-token': csrf,
-    },
-  });
-
-  if (!res.ok) throw new Error('Refresh failed');
-
-  const data = await res.json();
-  setAccessToken(data.access_token);
-}
-```
-
-### 5) API wrapper with 401 → refresh → retry (once)
-
-```ts
-let refreshing: Promise<void> | null = null;
-
-export async function apiFetch(API_URL: string, path: string, init: RequestInit = {}) {
-  async function doRequest() {
-    const headers = new Headers(init.headers);
-
-    const token = getAccessToken();
-    if (token) headers.set('authorization', `Bearer ${token}`);
-
-    return fetch(`${API_URL}${path}`, {
-      ...init,
-      headers,
-      credentials: 'include',
-    });
-  }
-
-  let res = await doRequest();
-  if (res.status !== 401) return res;
-
-  refreshing ??= refreshAccessToken(API_URL).finally(() => {
-    refreshing = null;
-  });
-
-  await refreshing;
-  return doRequest();
-}
-```
+- `refreshAccessToken()` implements a single-flight lock
+- `apiFetch()` retries once after refresh
+- boot flow tries refresh once to restore session
+- `deviceId` is generated and persisted
 
 ## Common pitfalls
 
 ### Cookies not being set/sent
 
-- Missing `credentials: 'include'`
+- missing `credentials: 'include'`
 - CORS not allowing credentials
-- Wrong cookie `SameSite` policy
+- wrong cookie `SameSite` policy
 - `COOKIE_SECURE=true` while testing over plain HTTP
 
 ### CSRF errors
@@ -171,16 +134,10 @@ export async function apiFetch(API_URL: string, path: string, init: RequestInit 
 If you get `401 CSRF token missing/invalid`:
 - confirm `csrf_token` cookie exists
 - confirm your frontend sends `x-csrf-token` header
-- confirm both values match
+- confirm values match
+- confirm you do not have two cookies with the same name but different paths
 
 ### Mobile apps
 
 httpOnly cookie refresh is usually not a good default for React Native.
 For mobile, prefer storing refresh tokens in secure storage and sending them in the request body.
-
-## Recommended structure in a real app
-
-- `src/lib/auth.ts` — login/logout/refresh logic
-- `src/lib/api.ts` — apiFetch wrapper
-- Keep access token in memory
-- On startup, try calling `/auth/refresh` once to establish a session

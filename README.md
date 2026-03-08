@@ -60,7 +60,8 @@ Cookies:
 
 ## Frontend integration
 
-See: [`docs/frontend.md`](docs/frontend.md)
+- Frontend guide: [`docs/frontend.md`](docs/frontend.md)
+- Backend auth design: [`docs/backend-auth.md`](docs/backend-auth.md)
 
 
 ```bash
