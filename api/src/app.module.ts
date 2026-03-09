@@ -1,13 +1,24 @@
 import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
+import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
-import { APP_GUARD } from '@nestjs/core';
 import { LoggerModule } from 'nestjs-pino';
+
+import { AuthModule } from './auth/auth.module';
+import { JwtAuthGuard } from './auth/jwt-auth.guard';
+import { PrismaModule } from './prisma/prisma.module';
 
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { PrismaExceptionFilter } from './common/filters/prisma-exception.filter';
 
 @Module({
   imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+      expandVariables: true,
+    }),
+    PrismaModule,
     ThrottlerModule.forRoot({
       throttlers: [{ ttl: 60_000, limit: 120 }],
     }),
@@ -25,13 +36,22 @@ import { AppService } from './app.service';
         },
       },
     }),
+    AuthModule,
   ],
   controllers: [AppController],
   providers: [
     AppService,
     {
+      provide: APP_FILTER,
+      useClass: PrismaExceptionFilter,
+    },
+    {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: JwtAuthGuard,
     },
   ],
 })

@@ -1,0 +1,14 @@
+# Node
+node_modules
+.pnpm-store
+
+# Env
+.env
+.env.*
+
+# Build
+**/dist
+**/coverage
+
+# OS
+.DS_Store
